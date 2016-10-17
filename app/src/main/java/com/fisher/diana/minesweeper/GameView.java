@@ -14,6 +14,8 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.Random;
 
 /**
@@ -40,8 +42,7 @@ public class GameView extends View {
     private Paint mBombCellPaint;
     private Paint mTextPaint;
 
-    private CellState[][] mGrid;
-    private int[][] mDataGrid;
+    private Cell[][] mCellGrid;
 
     private GestureDetector mGestureDetector;
 
@@ -84,23 +85,23 @@ public class GameView extends View {
         mTextPaint.setColor(0xFF000000);
         mTextPaint.setTextSize(25);
 
-        mGrid = new CellState[GRID_SIZE][GRID_SIZE];
-        for (int i = 0; i < GRID_SIZE; i++) {
+        mCellGrid = new Cell[GRID_SIZE][GRID_SIZE];
+        for( int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
-                mGrid[i][j] = CellState.UNVISITED;
+                mCellGrid[i][j] = new Cell(i, j);
             }
         }
 
         // Randomly set BOMB_COUNT bombs in the grid.
         Random random = new Random();
-        mDataGrid = new int[GRID_SIZE][GRID_SIZE];
         int bombsPlaced = 0;
+
         while (bombsPlaced < BOMB_COUNT) {
             int r = random.nextInt(GRID_SIZE);
             int c = random.nextInt(GRID_SIZE);
 
-            if (mDataGrid[r][c] != -1) {
-                mDataGrid[r][c] = -1;
+            if (!mCellGrid[r][c].hasBomb) {
+                mCellGrid[r][c].hasBomb = true;
                 bombsPlaced++;
             }
         }
@@ -108,8 +109,8 @@ public class GameView extends View {
         // Calculate the bomb count numbers for each cell not containing a bomb.
         for (int i = 0; i < GRID_SIZE; i++) {
             for (int j = 0; j < GRID_SIZE; j++) {
-                if (mDataGrid[i][j] != -1) {
-                    mDataGrid[i][j] = nearbyBombCount(i, j);
+                if (!mCellGrid[i][j].hasBomb) {
+                    mCellGrid[i][j].bombNeighborCount = nearbyBombCount(i, j);
                 }
             }
         }
@@ -143,7 +144,7 @@ public class GameView extends View {
         if (row < 0 || row >= GRID_SIZE) return false;
         if (column < 0 || column >= GRID_SIZE) return false;
 
-        return mDataGrid[row][column] == -1;
+        return mCellGrid[row][column].hasBomb;
     }
 
     @Override
@@ -159,7 +160,7 @@ public class GameView extends View {
         for (int r = 0; r < GRID_SIZE; r++) {
             for (int c = 0; c < GRID_SIZE; c++) {
                 Paint paint;
-                switch(mGrid[r][c]) {
+                switch(mCellGrid[r][c].cellState) {
                     case EMPTY:
                         paint = mEmptyCellPaint;
                         break;
@@ -177,12 +178,12 @@ public class GameView extends View {
                         break;
                 }
 //                // TODO remove this if statement!
-//                if (mDataGrid[r][c] == -1) {
+//                if (mCellGrid[r][c].hasBomb) {
 //                    paint = mBombCellPaint;
 //                }
                 canvas.drawRect(c*width/GRID_SIZE, r*height/GRID_SIZE, c*width/GRID_SIZE + width/GRID_SIZE, r*height/GRID_SIZE + height/GRID_SIZE, paint);
-                if (mGrid[r][c] == CellState.NUMBERED) {
-                    canvas.drawText(String.valueOf(mDataGrid[r][c]), c * width / GRID_SIZE + 20, r * height / GRID_SIZE + 50, mTextPaint);
+                if (mCellGrid[r][c].cellState == CellState.NUMBERED) {
+                    canvas.drawText(String.valueOf(mCellGrid[r][c].bombNeighborCount), c * width / GRID_SIZE + 20, r * height / GRID_SIZE + 50, mTextPaint);
                 }
             }
         }
@@ -220,10 +221,10 @@ public class GameView extends View {
 
 //            Log.d("GRID_VIEW", "touch event on cell " + row + "," + column);
 
-            if (mGrid[row][column] == CellState.FLAGGED) {
-                mGrid[row][column] = CellState.UNVISITED;
-            } else if (mGrid[row][column] == CellState.UNVISITED) {
-                mGrid[row][column] = CellState.FLAGGED;
+            if (mCellGrid[row][column].cellState == CellState.FLAGGED) {
+                mCellGrid[row][column].cellState = CellState.UNVISITED;
+            } else if (mCellGrid[row][column].cellState == CellState.UNVISITED) {
+                mCellGrid[row][column].cellState = CellState.FLAGGED;
             }
 
             invalidate();
@@ -251,14 +252,14 @@ public class GameView extends View {
             int row = location[0];
             int column = location[1];
 
-            if (mDataGrid[row][column] == -1) {
-                mGrid[row][column] = CellState.BOMB;
-            } else if (mDataGrid[row][column] == 0) {
+            if (mCellGrid[row][column].hasBomb) {
+                mCellGrid[row][column].cellState = CellState.BOMB;
+            } else if (mCellGrid[row][column].bombNeighborCount == 0) {
                 // expand until we hit non-empty cells.
                 expandFromCell(row, column);
             } else {
                 // reveal the number
-                mGrid[row][column] = CellState.NUMBERED;
+                mCellGrid[row][column].cellState = CellState.NUMBERED;
             }
 
             invalidate();
@@ -269,13 +270,13 @@ public class GameView extends View {
         private void expandFromCell(int row, int column) {
 //            Log.d(DEBUG_TAG, "checking cell " + row + "," + column);
             if (row < 0 || row >= GRID_SIZE || column < 0 || column >= GRID_SIZE) return;
-            if (mDataGrid[row][column] > 0) {
-                mGrid[row][column] = CellState.NUMBERED;
+            if (mCellGrid[row][column].bombNeighborCount > 0) {
+                mCellGrid[row][column].cellState = CellState.NUMBERED;
                 return;
             }
-            if (mGrid[row][column] == CellState.EMPTY) return;
+            if (mCellGrid[row][column].cellState == CellState.EMPTY) return;
 
-            mGrid[row][column] = CellState.EMPTY;
+            mCellGrid[row][column].cellState = CellState.EMPTY;
 
             expandFromCell(row+1, column);
             expandFromCell(row+1, column-1);
@@ -285,6 +286,14 @@ public class GameView extends View {
             expandFromCell(row-1, column);
             expandFromCell(row-1, column-1);
             expandFromCell(row-1, column+1);
+
+
+        }
+
+        private void expandFromCellNR(int row, int column) {
+            if (row < 0 || row >= GRID_SIZE || column == 0 || column >= GRID_SIZE) return;
+
+            // Create a queue
 
 
         }
@@ -311,5 +320,23 @@ public class GameView extends View {
 //
 //            return true;
 //        }
+    }
+
+    class Cell {
+        int row;
+        int column;
+        boolean visited;
+        int bombNeighborCount;
+        boolean hasBomb;
+        CellState cellState;
+
+        Cell(int row, int column) {
+            this.row = row;
+            this.column = column;
+            this.visited = false;
+            this.hasBomb = false;
+            this.bombNeighborCount = 0;
+            this.cellState = CellState.UNVISITED;
+        }
     }
 }
