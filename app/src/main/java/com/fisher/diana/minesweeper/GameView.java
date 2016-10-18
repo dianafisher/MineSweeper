@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.support.v4.view.GestureDetectorCompat;
+import android.telephony.CellLocation;
 import android.text.TextPaint;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -14,6 +15,7 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Random;
@@ -256,7 +258,8 @@ public class GameView extends View {
                 mCellGrid[row][column].cellState = CellState.BOMB;
             } else if (mCellGrid[row][column].bombNeighborCount == 0) {
                 // expand until we hit non-empty cells.
-                expandFromCell(row, column);
+//                expandFromCell(row, column);
+                expandFromCell(mCellGrid[row][column]);
             } else {
                 // reveal the number
                 mCellGrid[row][column].cellState = CellState.NUMBERED;
@@ -290,36 +293,46 @@ public class GameView extends View {
 
         }
 
-        private void expandFromCellNR(int row, int column) {
-            if (row < 0 || row >= GRID_SIZE || column == 0 || column >= GRID_SIZE) return;
+        private void expandFromCell(Cell cell) {
 
-            // Create a queue
+            // Create a queue of Cell objects
+            Queue<Cell> queue = new LinkedList<>();
+            queue.offer(cell);
+            while(!queue.isEmpty()) {
+                Cell current = queue.poll();
+                Log.d(DEBUG_TAG, "Checking cell " + current);
 
+                if (current.bombNeighborCount > 0) {
+                    current.cellState = CellState.NUMBERED;
+                } else if (current.cellState != CellState.EMPTY) {
 
+                    current.cellState = CellState.EMPTY;
+
+                    enqueCellAt(current.row+1, current.column, queue);
+                    enqueCellAt(current.row+1, current.column-1, queue);
+                    enqueCellAt(current.row+1, current.column+1, queue);
+
+                    enqueCellAt(current.row, current.column-1, queue);
+                    enqueCellAt(current.row, current.column+1, queue);
+
+                    enqueCellAt(current.row-1, current.column, queue);
+                    enqueCellAt(current.row-1, current.column-1, queue);
+                    enqueCellAt(current.row-1, current.column+1, queue);
+                }
+            }
         }
 
-//        public boolean onSingleTapConfirmed(MotionEvent event) {
-//
-//            Log.d(DEBUG_TAG, "onSingleTapConfirmed: " + event.toString());
-//
-//            float x = event.getX();
-//            float y = event.getY();
-//
-//            int width = getWidth();
-//            int height = getHeight();
-//
-//            // Which cell did they touch?
-//            int column = (int)(x / (width/5));
-//            int row = (int)(y / (height/5));
-//
-//            Log.d("GRID_VIEW", "touch event on cell " + row + "," + column);
-//
-//            mGrid[row][column] = 1;
-//
-//            invalidate();
-//
-//            return true;
-//        }
+        private void enqueCellAt(int row, int column, Queue<Cell> queue) {
+            if (row < 0 || row >= GRID_SIZE || column < 0 || column >= GRID_SIZE) return;
+
+            Cell cell = mCellGrid[row][column];
+
+            if (cell.cellState != CellState.EMPTY) {
+                if (!queue.contains(cell)) {
+                    queue.offer(cell);
+                }
+            }
+        }
     }
 
     class Cell {
@@ -337,6 +350,10 @@ public class GameView extends View {
             this.hasBomb = false;
             this.bombNeighborCount = 0;
             this.cellState = CellState.UNVISITED;
+        }
+
+        public String toString() {
+            return new StringBuilder("(").append(row).append(",").append(column).append(")").toString();
         }
     }
 }
